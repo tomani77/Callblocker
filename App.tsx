@@ -52,9 +52,7 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (blocklist.length > 0) {
-      CallBlockerModule.setBlocklist(blocklist);
-    }
+    CallBlockerModule.setBlocklist(blocklist);
   }, [blocklist]);
 
   const loadBlocklist = async () => {
@@ -90,9 +88,17 @@ const App = () => {
     setNumber('');
   };
 
+  const handleDeleteNumber = (numberToDelete: string) => {
+    const newBlocklist = blocklist.filter(item => item !== numberToDelete);
+    setBlocklist(newBlocklist);
+    saveBlocklist(newBlocklist);
+    CallBlockerModule.setBlocklist(newBlocklist);
+  };
+
   const renderItem = ({ item }: { item: string }) => (
     <View style={styles.item}>
       <Text style={styles.number}>{item}</Text>
+      <Button title="Delete" onPress={() => handleDeleteNumber(item)} />
     </View>
   );
 
@@ -107,6 +113,7 @@ const App = () => {
           keyboardType="phone-pad"
           value={number}
           onChangeText={setNumber}
+          maxLength={15}
         />
         <Button title="Add to Blocklist" onPress={handleAddNumber} />
         <FlatList
@@ -148,9 +155,13 @@ const styles = StyleSheet.create({
     padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#ccc',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   number: {
     fontSize: 18,
+    flex: 1,
   },
 });
 

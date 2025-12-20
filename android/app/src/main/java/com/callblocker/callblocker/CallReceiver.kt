@@ -26,21 +26,28 @@ class CallReceiver : BroadcastReceiver() {
             }
         }
     }
-
     private fun isBlocked(context: Context, incomingNumber: String): Boolean {
         val sharedPreferences = context.getSharedPreferences("BlocklistPrefs", Context.MODE_PRIVATE)
         val blocklist = sharedPreferences.getStringSet("blocklist", emptySet()) ?: emptySet()
 
         for (blockedNumber in blocklist) {
-            if (blockedNumber.endsWith("*")) {
-                if (incomingNumber.startsWith(blockedNumber.substring(0, blockedNumber.length - 1))) {
-                    return true
-                }
-            } else if (blockedNumber == incomingNumber) {
+            if (areNumbersMatching(incomingNumber, blockedNumber)) {
                 return true
             }
         }
         return false
+    }
+
+    private fun areNumbersMatching(incomingNumber: String, blockedNumber: String): Boolean {
+        if (blockedNumber.endsWith("*")) {
+            val prefix = blockedNumber.dropLast(1)
+            return incomingNumber.startsWith(prefix)
+        }
+
+        val normalizedIncoming = incomingNumber.filter { it.isDigit() }
+        val normalizedBlocked = blockedNumber.filter { it.isDigit() }
+
+        return normalizedIncoming.endsWith(normalizedBlocked)
     }
 
     private fun endCall(context: Context) {
