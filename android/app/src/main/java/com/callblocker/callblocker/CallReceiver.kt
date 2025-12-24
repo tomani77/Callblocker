@@ -8,9 +8,15 @@ import android.telephony.TelephonyManager
 import android.util.Log
 
 class CallReceiver : BroadcastReceiver() {
+    companion object {
+        private const val TAG = "CallReceiver"
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return // On Android 10+, CallScreeningService is used.
+            // On Android 10+, CallScreeningService is used instead
+            Log.d(TAG, "Android 10+ detected - CallScreeningService will handle this")
+            return
         }
 
         if (intent.action == "android.intent.action.PHONE_STATE") {
@@ -18,23 +24,35 @@ class CallReceiver : BroadcastReceiver() {
             if (state == TelephonyManager.EXTRA_STATE_RINGING) {
                 val incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
                 if (incomingNumber != null) {
-                    Log.d("CallReceiver", "Incoming call from: $incomingNumber")
-                    if (isBlocked(context, incomingNumber)) {
+                    Log.d(TAG, "Incoming call from: $incomingNumber")
+                    if (isNumberBlocked(context, incomingNumber)) {
+                        Log.d(TAG, "BLOCKING call from: $incomingNumber")
                         endCall(context)
+                    } else {
+                        Log.d(TAG, "ALLOWING call from: $incomingNumber")
                     }
                 }
             }
         }
     }
-    private fun isBlocked(context: Context, incomingNumber: String): Boolean {
-        val sharedPreferences = context.getSharedPreferences("BlocklistPrefs", Context.MODE_PRIVATE)
+
+    private fun isNumberBlocked(context: Context, incomingNumber: String): Boolean {
+        val sharedPreferences = context.getSharedPreferences("CallBlockerPrefs", Context.MODE_PRIVATE)
         val blocklist = sharedPreferences.getStringSet("blocklist", emptySet()) ?: emptySet()
+
+        if (blocklist.isEmpty()) {
+            Log.d(TAG, "Blocklist is empty - allowing call")
+            return false
+        }
 
         for (blockedNumber in blocklist) {
             if (areNumbersMatching(incomingNumber, blockedNumber)) {
+                Log.d(TAG, "Blocklist match: '$incomingNumber' matches '$blockedNumber'")
                 return true
             }
         }
+
+        Log.d(TAG, "No blocklist match found - allowing call")
         return false
     }
 
@@ -60,11 +78,10 @@ class CallReceiver : BroadcastReceiver() {
             telephonyService?.let {
                 val endCall = it.javaClass.getDeclaredMethod("endCall")
                 endCall.invoke(it)
+                Log.d(TAG, "Call ended successfully")
             }
-
-            Log.d("CallReceiver", "Call ended")
         } catch (t: Throwable) {
-            t.printStackTrace()
+            Log.e(TAG, "Error ending call: ${t.message}", t)
         }
     }
 }

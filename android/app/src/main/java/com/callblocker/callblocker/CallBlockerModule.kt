@@ -23,7 +23,7 @@ class CallBlockerModule(reactContext: ReactApplicationContext) : ReactContextBas
             blocklist.getString(i)?.let { set.add(it) }
         }
 
-        val sharedPreferences = reactApplicationContext.getSharedPreferences("BlocklistPrefs", Context.MODE_PRIVATE)
+        val sharedPreferences = reactApplicationContext.getSharedPreferences("CallBlockerPrefs", Context.MODE_PRIVATE)
         with(sharedPreferences.edit()) {
             putStringSet("blocklist", set)
             apply()

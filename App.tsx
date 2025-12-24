@@ -3,15 +3,15 @@ import {
   SafeAreaView,
   StyleSheet,
   View,
-  TextInput,
   Button,
-  FlatList,
   Text,
   StatusBar,
   Alert,
   NativeModules,
-  PermissionsAndroid,
   Platform,
+  ScrollView,
+  Switch,
+  TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -19,110 +19,163 @@ const { CallBlockerModule } = NativeModules;
 const BLOCKLIST_KEY = 'blocklist';
 
 const App = () => {
-  const [number, setNumber] = useState('');
   const [blocklist, setBlocklist] = useState<string[]>([]);
+  const [numberInput, setNumberInput] = useState('');
+  const [appStatus, setAppStatus] = useState('Initializing...');
 
   useEffect(() => {
-    const requestPermissions = async () => {
+    const initializeApp = async () => {
+      // Permissions are now requested from MainActivity
+      // Just request the Call Screening role if needed
       if (Platform.OS === 'android') {
         try {
-          const granted = await PermissionsAndroid.requestMultiple([
-            PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
-            PermissionsAndroid.PERMISSIONS.CALL_PHONE,
-            PermissionsAndroid.PERMISSIONS.READ_CALL_LOG,
-          ]);
-          if (
-            granted['android.permission.READ_PHONE_STATE'] === PermissionsAndroid.RESULTS.GRANTED &&
-            granted['android.permission.CALL_PHONE'] === PermissionsAndroid.RESULTS.GRANTED &&
-            granted['android.permission.READ_CALL_LOG'] === PermissionsAndroid.RESULTS.GRANTED
-          ) {
-            console.log('Permissions granted');
-            await CallBlockerModule.requestRole();
-          } else {
-            console.log('Permissions denied');
-          }
+          console.log('App initialized - permissions are handled by MainActivity');
+          setAppStatus('✓ App initialized');
+          await CallBlockerModule.requestRole();
+          setAppStatus('✓ Call Screening Role Requested');
         } catch (err) {
-          console.warn(err);
+          console.error('Initialization error:', err);
+          setAppStatus('⚠ Initialization pending');
         }
       }
     };
 
-    requestPermissions();
+    initializeApp();
     loadBlocklist();
   }, []);
 
   useEffect(() => {
     CallBlockerModule.setBlocklist(blocklist);
+    saveBlocklist();
   }, [blocklist]);
 
   const loadBlocklist = async () => {
     try {
       const storedBlocklist = await AsyncStorage.getItem(BLOCKLIST_KEY);
+      
       if (storedBlocklist !== null) {
         const parsedBlocklist = JSON.parse(storedBlocklist);
         setBlocklist(parsedBlocklist);
-        CallBlockerModule.setBlocklist(parsedBlocklist);
       }
     } catch (error) {
-      console.error('Failed to load blocklist.', error);
+      console.error('Failed to load blocklist:', error);
     }
   };
 
-  const saveBlocklist = async (newBlocklist: string[]) => {
+  const saveBlocklist = async () => {
     try {
-      await AsyncStorage.setItem(BLOCKLIST_KEY, JSON.stringify(newBlocklist));
-    }
-    catch (error) {
-      console.error('Failed to save blocklist.', error);
+      await AsyncStorage.setItem(BLOCKLIST_KEY, JSON.stringify(blocklist));
+    } catch (error) {
+      console.error('Failed to save blocklist:', error);
     }
   };
 
-  const handleAddNumber = () => {
-    if (number.trim() === '') {
+  const addToBlocklist = () => {
+    const number = numberInput.trim();
+    if (number === '') {
       Alert.alert('Error', 'Please enter a phone number.');
       return;
     }
+    
+    if (blocklist.includes(number)) {
+      Alert.alert('Error', 'This number is already in the blocklist.');
+      return;
+    }
+
     const newBlocklist = [...blocklist, number];
     setBlocklist(newBlocklist);
-    saveBlocklist(newBlocklist);
-    setNumber('');
+    setNumberInput('');
+    Alert.alert('Success', `${number} added to blocklist.`);
   };
 
-  const handleDeleteNumber = (numberToDelete: string) => {
-    const newBlocklist = blocklist.filter(item => item !== numberToDelete);
+  const removeFromBlocklist = (number: string) => {
+    const newBlocklist = blocklist.filter(item => item !== number);
     setBlocklist(newBlocklist);
-    saveBlocklist(newBlocklist);
-    CallBlockerModule.setBlocklist(newBlocklist);
   };
-
-  const renderItem = ({ item }: { item: string }) => (
-    <View style={styles.item}>
-      <Text style={styles.number}>{item}</Text>
-      <Button title="Delete" onPress={() => handleDeleteNumber(item)} />
-    </View>
-  );
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.content}>
-        <Text style={styles.title}>Call Blocker</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter phone number"
-          keyboardType="phone-pad"
-          value={number}
-          onChangeText={setNumber}
-          maxLength={15}
-        />
-        <Button title="Add to Blocklist" onPress={handleAddNumber} />
-        <FlatList
-          style={styles.list}
-          data={blocklist}
-          renderItem={renderItem}
-          keyExtractor={(item, index) => index.toString()}
-        />
-      </View>
+      <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
+      <ScrollView style={styles.content}>
+        <Text style={styles.title}>🚫 Call Blocker</Text>
+        
+        <View style={styles.statusBox}>
+          <Text style={styles.statusLabel}>App Status:</Text>
+          <Text style={styles.statusText}>{appStatus}</Text>
+        </View>
+
+        <View style={styles.settingsBox}>
+          <Text style={styles.settingsTitle}>Call Filtering</Text>
+          <Text style={styles.settingDescription}>By default: All calls are allowed ✓</Text>
+          <Text style={styles.settingDescription}>Add numbers below to block them</Text>
+        </View>
+
+        <View style={styles.inputBox}>
+          <Text style={styles.inputLabel}>Enter phone number to block:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g., +91XXXXXXXXXX or 91* for country code"
+            placeholderTextColor="#666"
+            keyboardType="phone-pad"
+            value={numberInput}
+            onChangeText={setNumberInput}
+            maxLength={20}
+          />
+          <Text style={styles.wildcardHint}>
+            💡 Use * as wildcard: e.g., "91*" blocks all numbers starting with 91
+          </Text>
+          <Button
+            title="+ Add to Blocklist"
+            onPress={addToBlocklist}
+            color="#007AFF"
+          />
+        </View>
+
+        <View style={styles.blocklistBox}>
+          <Text style={styles.blocklistTitle}>Blocked Numbers ({blocklist.length})</Text>
+          
+          {blocklist.length === 0 ? (
+            <Text style={styles.emptyText}>No blocked numbers - all calls will be allowed</Text>
+          ) : (
+            blocklist.map((number, index) => (
+              <View key={index} style={styles.blocklistItem}>
+                <View style={styles.numberContainer}>
+                  <Text style={styles.blocklistNumber}>{number}</Text>
+                  {number.includes('*') && (
+                    <Text style={styles.wildcardBadge}>Wildcard</Text>
+                  )}
+                </View>
+                <Button
+                  title="Remove"
+                  onPress={() => removeFromBlocklist(number)}
+                  color="#ff1744"
+                />
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={styles.infoBox}>
+          <Text style={styles.infoTitle}>ℹ️ How It Works</Text>
+          <Text style={styles.infoText}>
+            • Default: All incoming calls are allowed{'\n'}
+            • Add numbers to blocklist to prevent them from reaching you{'\n'}
+            • Supports wildcard patterns (e.g., "91*" blocks all Indian numbers){'\n'}
+            • Uses CallScreeningService (Android 10+){'\n'}
+            • Settings are saved automatically
+          </Text>
+        </View>
+
+        <View style={styles.examplesBox}>
+          <Text style={styles.examplesTitle}>📝 Examples</Text>
+          <Text style={styles.examplesText}>
+            • "1234567890" - blocks exact number{'\n'}
+            • "91*" - blocks all numbers starting with 91{'\n'}
+            • "+1*" - blocks all +1 country code{'\n'}
+            • "555*" - blocks all numbers starting with 555
+          </Text>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -130,38 +183,179 @@ const App = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#1a1a1a',
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
+    color: '#fff',
     marginBottom: 20,
+    textAlign: 'center',
+  },
+  statusBox: {
+    backgroundColor: '#2a2a2a',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  statusLabel: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  settingsBox: {
+    backgroundColor: '#2a2a2a',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  settingsTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  settingDescription: {
+    color: '#aaa',
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  inputBox: {
+    backgroundColor: '#2a2a2a',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  inputLabel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 10,
   },
   input: {
-    height: 40,
-    borderColor: 'gray',
+    backgroundColor: '#1a1a1a',
+    color: '#fff',
     borderWidth: 1,
+    borderColor: '#444',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginBottom: 10,
-    paddingHorizontal: 10,
+    fontSize: 14,
   },
-  list: {
-    marginTop: 20,
+  wildcardHint: {
+    color: '#ffb300',
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginBottom: 12,
+    padding: 8,
+    backgroundColor: 'rgba(255, 179, 0, 0.1)',
+    borderRadius: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: '#ffb300',
   },
-  item: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
+  blocklistBox: {
+    backgroundColor: '#2a2a2a',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  blocklistTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  emptyText: {
+    color: '#888',
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginBottom: 12,
+    padding: 8,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 4,
+  },
+  blocklistItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#ff1744',
   },
-  number: {
-    fontSize: 18,
+  numberContainer: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  blocklistNumber: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  wildcardBadge: {
+    color: '#ffb300',
+    fontSize: 11,
+    fontWeight: '600',
+    backgroundColor: 'rgba(255, 179, 0, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  infoBox: {
+    backgroundColor: '#2a2a2a',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFC107',
+  },
+  infoTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  infoText: {
+    color: '#aaa',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  examplesBox: {
+    backgroundColor: '#2a2a2a',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  examplesTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  examplesText: {
+    color: '#aaa',
+    fontSize: 12,
+    lineHeight: 18,
   },
 });
 

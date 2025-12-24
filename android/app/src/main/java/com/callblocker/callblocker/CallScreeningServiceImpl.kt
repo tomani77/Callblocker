@@ -1,5 +1,7 @@
 package com.callblocker.callblocker
 
+import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.telecom.Call
 import android.telecom.CallScreeningService
@@ -9,56 +11,101 @@ import androidx.annotation.RequiresApi
 @RequiresApi(Build.VERSION_CODES.Q)
 class CallScreeningServiceImpl : CallScreeningService() {
 
-    override fun onScreenCall(callDetails: Call.Details) {
-        val phoneNumber = callDetails.getHandle().toString()
-        Log.d("CallScreeningService", "Incoming call from: $phoneNumber")
-        val formattedPhoneNumber = phoneNumber.removePrefix("tel:")
-        Log.d("CallScreeningService", "Formatted number: $formattedPhoneNumber")
-
-
-        val sharedPreferences = getSharedPreferences("BlocklistPrefs", MODE_PRIVATE)
-        val blocklist = sharedPreferences.getStringSet("blocklist", emptySet()) ?: emptySet()
-        Log.d("CallScreeningService", "Blocklist: $blocklist")
-
-
-        var isBlocked = false
-        for (blockedNumber in blocklist) {
-            Log.d("CallScreeningService", "Checking against: $blockedNumber")
-            if (areNumbersMatching(formattedPhoneNumber, blockedNumber)) {
-                isBlocked = true
-                Log.d("CallScreeningService", "Number is in blocklist. Blocking.")
-                break
-            }
+    companion object {
+        private const val TAG = "CallScreeningService"
+        init {
+            Log.e(TAG, "� CLASS LOADED INTO MEMORY - CallScreeningServiceImpl")
         }
+    }
 
-        val response = if (isBlocked) {
-            CallResponse.Builder()
+    private fun writeLog(message: String) {
+        Log.d(TAG, message)
+        Log.i(TAG, message)
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        Log.e(TAG, "📞 SERVICE CREATED - Service is ready to screen calls")
+        writeLog("onCreate() called - CallScreeningService is binding")
+    }
+
+    init {
+        Log.e(TAG, "📞 INSTANCE CREATED - init block executed")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        writeLog("onDestroy() called - Service is unbinding")
+    }
+
+    override fun onScreenCall(callDetails: Call.Details) {
+        Log.e(TAG, "📞 onScreenCall INVOKED - Processing incoming call 📞")
+        writeLog("=== onScreenCall invoked ===")
+        
+        val handle = callDetails.handle
+        val formattedPhoneNumber = if (handle != null) Uri.decode(handle.schemeSpecificPart) else "UNKNOWN"
+        writeLog("Incoming call from: $formattedPhoneNumber")
+
+        // Check if the number is in blocklist
+        val isBlocked = isNumberBlocked(formattedPhoneNumber)
+
+        if (isBlocked) {
+            writeLog("🚫 BLOCKING CALL: $formattedPhoneNumber matches blocklist")
+            
+            val response = CallResponse.Builder()
                 .setDisallowCall(true)
                 .setRejectCall(true)
                 .setSkipCallLog(true)
                 .setSkipNotification(true)
                 .build()
+            
+            try {
+                respondToCall(callDetails, response)
+                Log.e(TAG, "✓ BLOCKED: $formattedPhoneNumber - Call rejected successfully")
+                writeLog("=== onScreenCall completed - CALL BLOCKED ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "✗ ERROR in respondToCall(): ${e.message}", e)
+            }
         } else {
-            Log.d("CallScreeningService", "Number is not in blocklist. Allowing.")
-            CallResponse.Builder()
-                .setDisallowCall(false)
-                .setRejectCall(false)
-                .build()
+            writeLog("✓ ALLOWING: $formattedPhoneNumber (not in blocklist)")
+            // Don't respond - let the call through
+            writeLog("=== onScreenCall completed - CALL ALLOWED ===")
         }
-        respondToCall(callDetails, response)
+    }
+
+    private fun isNumberBlocked(incomingNumber: String): Boolean {
+        val sharedPreferences = getSharedPreferences("CallBlockerPrefs", Context.MODE_PRIVATE)
+        val blocklist = sharedPreferences.getStringSet("blocklist", emptySet()) ?: emptySet()
+
+        if (blocklist.isEmpty()) {
+            writeLog("Blocklist is empty - allowing call")
+            return false
+        }
+
+        for (blockedNumber in blocklist) {
+            if (areNumbersMatching(incomingNumber, blockedNumber)) {
+                writeLog("  Blocklist match found: '$incomingNumber' matches '$blockedNumber'")
+                return true
+            }
+        }
+        return false
     }
 
     private fun areNumbersMatching(incomingNumber: String, blockedNumber: String): Boolean {
+        val normalizedIncoming = incomingNumber.filter { it.isDigit() }
+
+        // Handle wildcard patterns
         if (blockedNumber.endsWith("*")) {
-            val prefix = blockedNumber.dropLast(1)
-            return incomingNumber.startsWith(prefix)
+            val prefix = blockedNumber.dropLast(1).filter { it.isDigit() }
+            val matches = normalizedIncoming.startsWith(prefix)
+            writeLog("  Wildcard check: '$normalizedIncoming' starts with '$prefix' = $matches")
+            return matches
         }
 
-        val normalizedIncoming = incomingNumber.filter { it.isDigit() }
+        // Handle exact or suffix match
         val normalizedBlocked = blockedNumber.filter { it.isDigit() }
-        Log.d("CallScreeningService", "Normalized incoming: $normalizedIncoming, normalized blocked: $normalizedBlocked")
-
-
-        return normalizedIncoming.endsWith(normalizedBlocked)
+        val matches = normalizedIncoming.endsWith(normalizedBlocked)
+        writeLog("  Exact/suffix check: '$normalizedIncoming' ends with '$normalizedBlocked' = $matches")
+        return matches
     }
 }
