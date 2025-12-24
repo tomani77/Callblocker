@@ -12,6 +12,8 @@ import {
   ScrollView,
   Switch,
   TextInput,
+  TouchableOpacity,
+  FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -22,6 +24,8 @@ const App = () => {
   const [blocklist, setBlocklist] = useState<string[]>([]);
   const [numberInput, setNumberInput] = useState('');
   const [appStatus, setAppStatus] = useState('Initializing...');
+  const [activeTab, setActiveTab] = useState('settings');
+  const [history, setHistory] = useState<any[]>([]);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -48,6 +52,23 @@ const App = () => {
     CallBlockerModule.setBlocklist(blocklist);
     saveBlocklist();
   }, [blocklist]);
+
+  useEffect(() => {
+    if (activeTab === 'history') {
+      loadHistory();
+    }
+  }, [activeTab]);
+
+  const loadHistory = async () => {
+    try {
+      const data = await CallBlockerModule.getBlockedHistory();
+      // Sort by timestamp descending (newest first)
+      const sorted = data.sort((a: any, b: any) => b.timestamp - a.timestamp);
+      setHistory(sorted);
+    } catch (error) {
+      console.error('Failed to load history:', error);
+    }
+  };
 
   const loadBlocklist = async () => {
     try {
@@ -96,19 +117,32 @@ const App = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
-      <ScrollView style={styles.content}>
-        <Text style={styles.title}>🚫 Call Blocker</Text>
+      
+      <View style={styles.tabContainer}>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'settings' && styles.activeTab]}
+          onPress={() => setActiveTab('settings')}
+        >
+          <Text style={[styles.tabText, activeTab === 'settings' && styles.activeTabText]}>⚙️ Settings</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'history' && styles.activeTab]}
+          onPress={() => setActiveTab('history')}
+        >
+          <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>🕒 History</Text>
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'settings' ? (
+        <ScrollView style={styles.content}>
+          <Text style={styles.title}>🚫 Call Blocker</Text>
         
         <View style={styles.statusBox}>
           <Text style={styles.statusLabel}>App Status:</Text>
           <Text style={styles.statusText}>{appStatus}</Text>
         </View>
 
-        <View style={styles.settingsBox}>
-          <Text style={styles.settingsTitle}>Call Filtering</Text>
-          <Text style={styles.settingDescription}>By default: All calls are allowed ✓</Text>
-          <Text style={styles.settingDescription}>Add numbers below to block them</Text>
-        </View>
+        
 
         <View style={styles.inputBox}>
           <Text style={styles.inputLabel}>Enter phone number to block:</Text>
@@ -175,7 +209,29 @@ const App = () => {
             • "555*" - blocks all numbers starting with 555
           </Text>
         </View>
-      </ScrollView>
+        </ScrollView>
+      ) : (
+        <View style={styles.content}>
+          <Text style={styles.title}>🚫 Blocked History</Text>
+          <FlatList
+            data={history}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.historyItem}>
+                <Text style={styles.historyNumber}>{item.number}</Text>
+                <Text style={styles.historyTime}>
+                  {new Date(item.timestamp).toLocaleString()}
+                </Text>
+              </View>
+            )}
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>No blocked calls recorded yet.</Text>
+            }
+            onRefresh={loadHistory}
+            refreshing={false}
+          />
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -188,6 +244,32 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#121212',
+    margin: 16,
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  activeTab: {
+    backgroundColor: '#007AFF',
+  },
+  tabText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  activeTabText: {
+    color: '#fff',
   },
   title: {
     fontSize: 28,
@@ -356,6 +438,24 @@ const styles = StyleSheet.create({
     color: '#aaa',
     fontSize: 12,
     lineHeight: 18,
+  },
+  historyItem: {
+    backgroundColor: '#2a2a2a',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff1744',
+  },
+  historyNumber: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  historyTime: {
+    color: '#aaa',
+    fontSize: 12,
   },
 });
 

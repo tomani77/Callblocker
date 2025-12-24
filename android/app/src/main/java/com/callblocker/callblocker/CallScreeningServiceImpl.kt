@@ -51,6 +51,7 @@ class CallScreeningServiceImpl : CallScreeningService() {
 
         if (isBlocked) {
             writeLog("🚫 BLOCKING CALL: $formattedPhoneNumber matches blocklist")
+            BlockedCallHistoryManager.addBlockedCall(this, formattedPhoneNumber)
             
             val response = CallResponse.Builder()
                 .setDisallowCall(true)

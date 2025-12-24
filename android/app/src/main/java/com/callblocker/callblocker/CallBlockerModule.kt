@@ -4,11 +4,13 @@ import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
+import org.json.JSONArray
 
 class CallBlockerModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
@@ -42,6 +44,26 @@ class CallBlockerModule(reactContext: ReactApplicationContext) : ReactContextBas
             promise.resolve(true)
         } else {
             promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun getBlockedHistory(promise: Promise) {
+        try {
+            val historyJson = BlockedCallHistoryManager.getHistory(reactApplicationContext)
+            val jsonArray = JSONArray(historyJson)
+            val writableArray = Arguments.createArray()
+
+            for (i in 0 until jsonArray.length()) {
+                val jsonObject = jsonArray.getJSONObject(i)
+                val map = Arguments.createMap()
+                map.putString("number", jsonObject.getString("number"))
+                map.putDouble("timestamp", jsonObject.getLong("timestamp").toDouble())
+                writableArray.pushMap(map)
+            }
+            promise.resolve(writableArray)
+        } catch (e: Exception) {
+            promise.reject("ERROR_GETTING_HISTORY", e)
         }
     }
 }

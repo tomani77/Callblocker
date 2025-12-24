@@ -27,6 +27,7 @@ class CallReceiver : BroadcastReceiver() {
                     Log.d(TAG, "Incoming call from: $incomingNumber")
                     if (isNumberBlocked(context, incomingNumber)) {
                         Log.d(TAG, "BLOCKING call from: $incomingNumber")
+                        BlockedCallHistoryManager.addBlockedCall(context, incomingNumber)
                         endCall(context)
                     } else {
                         Log.d(TAG, "ALLOWING call from: $incomingNumber")
